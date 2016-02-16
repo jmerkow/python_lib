@@ -74,6 +74,33 @@ def conv_bn_relu(bottom, nout, ks = 3, stride=1, pad = 0, learn = True,
         
     return conv, bn, relu
 
+def conv_bn_scale(bottom, nout, ks = 3, stride=1, pad = 0,
+                       learn = True, bn_learn = True,
+                       use_global_stats=False, add_relu=False, **convargs):
+    if learn:
+        param = [dict(lr_mult=1, decay_mult=1)]
+    else:
+        param = [dict(lr_mult=0, decay_mult=0)]
+        
+    if bn_learn:
+        bn_param = [dict(lr_mult=1, decay_mult=1), dict(lr_mult=1, decay_mult=1), dict(lr_mult=1, decay_mult=1)]
+    else:
+        bn_param = [dict(lr_mult=0, decay_mult=0), dict(lr_mult=0, decay_mult=0), dict(lr_mult=0, decay_mult=0),]
+    
+    conv = L.Convolution(bottom, kernel_size=ks, stride=stride,
+            num_output=nout, pad=pad, param = param, bias_term=False,
+                         weight_filler=dict(type="msra"),**convargs)
+    
+    bn= L.BatchNorm(conv,in_place=True,use_global_stats=use_global_stats)
+    scale = L.Scale(bn, in_place=True, bias_term=True)
+    
+    if add_relu:
+        relu = L.ReLU(scale,in_place=True)
+        return conv, bn, scale, relu
+    else:
+        return conv, bn, scale
+    
+
 def ip_relu(bottom, nout, learn=True, param=None,
               wf=None,bf=None):
     if learn and param is None:
@@ -481,8 +508,125 @@ def vgg16(nclasses, source, transform_param=None, batch_size=32, acclayer = Fals
         n.accuracy = L.Accuracy(n.score, n.label)
     return n
 
+def residual_standard_unit(n, bottom, nout, s, newdepth = False, use_global_stats=False):
+    """
+    This creates the "standard unit" shown on the left side of Figure 5.
+    """
+#     bottom = n.__dict__['tops'][n.__dict__['tops'].keys()[-1]] #find the last layer in netspec
+    ns=dict()
+    stride = newdepth if newdepth else 1
 
-def residual_standard_unit(n, nout, s, newdepth = False):
+    ns[s + '_branch2conv1'], ns[s + '_branch2bn1'], ns[s + '_branch2scale1']  = conv_bn_scale(bottom, ks = 3, 
+                                                                                           stride = stride, nout = nout, pad = 1, 
+                                                                                           use_global_stats=use_global_stats)
+    ns[s + '_branch2relu1'] = L.ReLU(ns[s + '_branch2scale1'], in_place=True)
+    ns[s + '_branch2conv2'], ns[s + '_branch2bn2'], ns[s + '_branch2scale2'] = conv_bn_scale(ns[s + '_branch2relu1'], ks = 3,
+                                                                                          stride = 1, nout = nout, pad = 1,
+                                                                                          use_global_stats=use_global_stats)
+   
+    if newdepth:
+        ns[s + '_branch1conv'], ns[s + '_branch1bn1'], ns[s + '_branch1scale1'] = conv_bn_scale(bottom, ks = 1, 
+                                                                                            stride = stride, nout = nout, pad = 0,
+                                                                                            use_global_stats=use_global_stats)
+        ns[s] = L.Eltwise(ns[s + '_branch1scale1'],ns[s + '_branch2scale2'])
+    else:
+        ns[s] = L.Eltwise(bottom, ns[s + '_branch2scale2'])
+
+    ns[s + '_relu'] = L.ReLU(ns[s], in_place=True)
+    
+    dict2net(n,ns)
+    return ns[s + '_relu']
+    
+def residual_bottleneck_unit(n,bottom, nout, s, newdepth = False, use_global_stats=False):
+    """
+    This creates the "standard unit" shown on the left side of Figure 5.
+    """
+    
+#     bottom = n.__dict__['tops'][n.__dict__['tops'].keys()[-1]]
+    
+    ns=dict()
+    stride = newdepth if newdepth else 1
+
+    ns[s + '_branch2conv1'], ns[s + '_branch2bn1'], ns[s + '_branch2scale1'] = conv_bn_scale(bottom, ks = 1, 
+                                                                                           stride = stride, nout = nout, pad = 0,
+                                                                                           use_global_stats=use_global_stats)
+    ns[s + '_branch2relu1'] = L.ReLU(ns[s + '_branch2scale1'], in_place=True)
+    ns[s + '_branch2conv2'], ns[s + '_branch2bn2'], ns[s + '_branch2scale2'] = conv_bn_scale(ns[s + '_branch2relu1'], ks = 3,
+                                                                                          stride = 1, nout = nout, pad = 1,
+                                                                                          use_global_stats=use_global_stats)
+    ns[s + '_branch2relu2'] = L.ReLU(ns[s + '_branch2scale2'], in_place=True)
+    ns[s + '_branch2conv3'], ns[s + '_branch2bn3'], ns[s + '_branch2scale3'] = conv_bn_scale(ns[s + '_branch2relu2'], ks = 1,
+                                                                                          stride = 1, nout = nout*4, pad = 0,
+                                                                                          use_global_stats=use_global_stats)
+   
+    if newdepth:
+        ns[s + '_branch1conv'], ns[s + '_branch1bn1'], ns[s + '_branch1scale1'] = conv_bn_scale(bottom, ks = 1, 
+                                                                                            stride = stride, nout = nout*4, pad = 0,
+                                                                                            use_global_stats=use_global_stats)
+        ns[s] = L.Eltwise(ns[s + '_branch1scale1'],ns[s + '_branch2scale3'])
+    else:
+        ns[s] = L.Eltwise(bottom, ns[s + '_branch2scale3'])
+
+    ns[s + '_relu'] = L.ReLU(ns[s], in_place=True)
+    
+    dict2net(n,ns)
+    return ns[s + '_relu']
+    
+def residual_net(n,bottom,total_depth, nclasses, use_global_stats=False,return_layer=None):
+    """
+    Generates nets from "Deep Residual Learning for Image Recognition". 
+    Nets follow architectures outlined in Table 1. 
+    """
+    # figure out network structure
+    net_defs = {
+        18:([2, 2, 2, 2], "standard"),
+        34:([3, 4, 6, 3], "standard"),
+        50:([3, 4, 6, 3], "bottleneck"),
+        101:([3, 4, 23, 3], "bottleneck"),
+        152:([3, 8, 36, 3], "bottleneck"),
+    }
+    alpha = string.ascii_lowercase
+    assert total_depth in net_defs.keys(), "net of depth:{} not defined".format(total_depth)
+
+    # nunits_list a list of integers indicating the number of layers in each depth.
+    nunits_list, unit_type = net_defs[total_depth] 
+    nouts = [64, 128, 256, 512] # same for all nets
+    
+    n.conv1, n.bn1, n.scale1 = conv_bn_scale(bottom, ks = 7, 
+                                           stride = 2, nout = 64, pad = 3,
+                                           use_global_stats=use_global_stats)
+    n.conv1_relu = L.ReLU(n.scale1, in_place=True)
+    n.pool1 = L.Pooling(n.conv1_relu, stride = 2, kernel_size = 3, pool=P.Pooling.MAX)
+    
+    U=n.pool1
+    
+    # make the convolutional body
+    for i,(nout, nunits) in enumerate(zip(nouts, nunits_list)): # for each depth and nunits
+        for unit,a in zip(range(1, nunits + 1),alpha): # for each unit. Enumerate from 1.
+#             s = str(nout) + '_' + str(unit) + '_' # layer name prefix
+            s= 'res{}{}'.format(i+2,a)
+#             print(s)
+            newdepth = 2 if unit is 1 else 0
+            if i is 0 and newdepth:
+                newdepth=1
+            if unit_type == "standard":
+
+                U=residual_standard_unit(n,U, nout, s, newdepth = newdepth, use_global_stats=use_global_stats)
+            else:
+                U=residual_bottleneck_unit(n,U, nout, s, newdepth = newdepth, use_global_stats=use_global_stats)
+
+    # add the end layers                    
+    n.global_pool = L.Pooling(U, pooling_param = dict(pool = 1, global_pooling = True))
+    setattr(n,'fc'+str(nclasses),  L.InnerProduct(n.global_pool, num_output = nclasses,
+        param=[dict(lr_mult=1, decay_mult=1), dict(lr_mult=2, decay_mult=0)]))
+    
+    if return_layer is None:
+        return getattr(n,'fc'+str(nclasses))
+    else:
+        return getattr(n,return_layer)
+
+
+def residual_standard_unit_old(n, nout, s, newdepth = False):
     """
     This creates the "standard unit" shown on the left side of Figure 5.
     """
@@ -502,7 +646,7 @@ def residual_standard_unit(n, nout, s, newdepth = False):
     n[s + 'relu2'] = L.ReLU(s + 'sum', in_place=True)
     
 
-def residual_bottleneck_unit(n, nout, s, newdepth = False):
+def residual_bottleneck_unit_old(n, nout, s, newdepth = False):
     """
     This creates the "standard unit" shown on the left side of Figure 5.
     """
@@ -524,7 +668,7 @@ def residual_bottleneck_unit(n, nout, s, newdepth = False):
 
     n[s + 'relu3'] = L.ReLU(n[s + 'sum'], in_place=True)
 
-def residual_net(total_depth, data_layer_params, num_classes = 1000, acclayer = True):
+def residual_net_old(total_depth, data_layer_params, num_classes = 1000, acclayer = True):
     """
     Generates nets from "Deep Residual Learning for Image Recognition". Nets follow architectures outlined in Table 1. 
     """
@@ -554,9 +698,9 @@ def residual_net(total_depth, data_layer_params, num_classes = 1000, acclayer = 
         for unit in range(1, nunits + 1): # for each unit. Enumerate from 1.
             s = str(nout) + '_' + str(unit) + '_' # layer name prefix
             if unit_type == "standard":
-                residual_standard_unit(n, nout, s, newdepth = unit is 1 and nout > 64)
+                residual_standard_unit_old(n, nout, s, newdepth = unit is 1 and nout > 64)
             else:
-                residual_bottleneck_unit(n, nout, s, newdepth = unit is 1)
+                residual_bottleneck_unit_old(n, nout, s, newdepth = unit is 1)
                 
     # add the end layers                    
     n.global_pool = L.Pooling(n.__dict__['tops'][n.__dict__['tops'].keys()[-1]], pooling_param = dict(pool = 1, global_pooling = True))
