@@ -7,6 +7,44 @@ import PIL
 import h5py
 import SimpleITK as sitk
 
+def mirrorlr(img):
+    for i in range(img.shape[-2]):
+        img[...,i,:]=img[...,i,::-1]
+    return img
+
+def piecewise_window(x,wcenter=0,wwidth=200,wslope=.1):    
+    return np.piecewise(x,
+                    [x < wcenter-wwidth/2,
+                     (wcenter-wwidth/2 <= x) & (x <= wcenter+wwidth/2),
+                     x > wcenter+wwidth/2-wcenter],
+                    [lambda x: wslope*x-wwidth/2+wcenter,
+                     lambda x: x,
+                     lambda x: wslope*x+wwidth/2])
+def window_image(im,wcenter=0,wwidth=200,wslope=.1):
+    return piecewise_window(im.flatten(),wcenter=wcenter,
+                            wwidth=wwidth,wslope=wslope).reshape(im.shape)
+
+def jtm_scale_croppad_window(image,newdims=None,scale=(.5,.5), padmode='edge',
+                             wcenter=100,wwidth=300,wslope=.05):
+    if newdims is None:
+        raise ValueError('Need newdims')
+        
+    im=window_image(image,wcenter=wcenter,wwidth=wwidth,wslope=wslope)
+    im=scipy.ndimage.interpolation.zoom(im, scale, order=1)
+    
+    im = np.array(im, dtype=np.float32)
+    roi=(np.array(im.shape,dtype=np.float32)-newdims)
+    pad=np.maximum(-roi,0)
+    roi = np.array([r if np.mod(r,2)==0 else r+1 for r in roi])/2
+    roi=(np.maximum(roi,0)).astype(int)
+    if(sum(pad)):
+#         print(pad,scale)
+        pad2=[[p/2,p/2] if np.mod(p,2)==0 else [(p-1)/2,(p+1)/2] for p in pad]
+        im=np.pad(im,pad2,mode=padmode)
+    im=im[roi[0]:roi[0]+newdims[0],roi[1]:roi[1]+newdims[1]]
+    
+    return im
+
 def jtm_resize(im, new_dims, interp_order=1):
     roi=np.array(im.shape,dtype=np.float32)-np.array(new_dims)
     im_min, im_max = im.min(), im.max()
@@ -15,7 +53,13 @@ def jtm_resize(im, new_dims, interp_order=1):
     resized_im = resized_std * (im_max - im_min) + im_min
     return resized_im.astype(np.float32)
 
-def jtm_croppad(im,newdims): 
+def jtm_squash(image,newdims): 
+    scale = tuple(np.array(newdims, dtype=float) / np.array(image.shape))
+    im=scipy.ndimage.interpolation.zoom(image, scale, order=1) # squash
+    
+    return im
+
+def jtm_croppad(im,newdims,padmode='edge'): 
     # print('jtm_croppad')
     im = np.array(im, dtype=np.float32)
     roi=(np.array(im.shape,dtype=np.float32)-newdims)
@@ -24,13 +68,13 @@ def jtm_croppad(im,newdims):
     roi=(np.maximum(roi,0)).astype(int)
     if(sum(pad)):
         pad2=[[p/2,p/2] if np.mod(p,2)==0 else [(p-1)/2,(p+1)/2] for p in pad]
-        im=np.pad(im,pad2,'edge')
+        im=np.pad(im,pad2,mode=padmode)
     
     im=im[roi[0]:roi[0]+newdims[0],roi[1]:roi[1]+newdims[1]]
     
     return im
 
-def jtm_scale_croppad(image,newdims=None,scale=(.5,.5)):
+def jtm_scale_croppad(image,newdims=None,scale=(.5,.5), padmode='edge'):
     if newdims is None:
         raise ValueError('Need newdims')
     
@@ -44,7 +88,26 @@ def jtm_scale_croppad(image,newdims=None,scale=(.5,.5)):
     if(sum(pad)):
 #         print(pad,scale)
         pad2=[[p/2,p/2] if np.mod(p,2)==0 else [(p-1)/2,(p+1)/2] for p in pad]
-        im=np.pad(im,pad2,'edge')
+        im=np.pad(im,pad2,mode=padmode)
+    im=im[roi[0]:roi[0]+newdims[0],roi[1]:roi[1]+newdims[1]]
+    
+    return im
+
+def jtm_scale_croppad2(image,newdims=None,scale=(.5,.5), **kwargs):
+    if newdims is None:
+        raise ValueError('Need newdims')
+    
+    im=scipy.ndimage.interpolation.zoom(image, scale, order=1)
+    
+    im = np.array(im, dtype=np.float32)
+    roi=(np.array(im.shape,dtype=np.float32)-newdims)
+    pad=np.maximum(-roi,0)
+    roi = np.array([r if np.mod(r,2)==0 else r+1 for r in roi])/2
+    roi=(np.maximum(roi,0)).astype(int)
+    if(sum(pad)):
+#         print(pad,scale)
+        pad2=[[p/2,p/2] if np.mod(p,2)==0 else [(p-1)/2,(p+1)/2] for p in pad]
+        im=np.pad(im,pad2,**kwargs)
     im=im[roi[0]:roi[0]+newdims[0],roi[1]:roi[1]+newdims[1]]
     
     return im

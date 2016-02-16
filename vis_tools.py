@@ -38,6 +38,14 @@ def normal_img2(E,vmin=None,vmax=None):
     except:
         print E.shape
         return None
+        
+def get_plots(numx,numy=1,margin=.05,ysize=100,xsize=100,dpi=20,figsize=None):
+    
+    if figsize is None:
+        figsize = (1 + margin) * ysize*numy / dpi, (1 + margin) * xsize*numx / dpi
+
+    return plt.subplots(numx,numy,figsize=figsize, dpi=dpi)
+
 def tile_im(*images,**kwargs):
     num_im = len(images)
     nrows = kwargs.pop('nrows', None)

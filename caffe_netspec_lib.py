@@ -4,6 +4,7 @@ from image_tools import *
 from caffe import layers as L, params as P
 from caffe import net_spec
 from caffe.proto import caffe_pb2
+from collections import OrderedDict
 
 def get_top(n,k):
     return n.__dict__['tops'][k]
