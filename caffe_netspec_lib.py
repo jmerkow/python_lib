@@ -394,7 +394,8 @@ def watchtower(n,bottom,s,nclass):
     return ns[s+'/classifier']
 
 
-def googlenet(n,nclass,data_top,add_watchtower=True,arch_table=None):
+def googlenet(n,nclass,data_top,add_watchtower=True,arch_table=None, dropout=0.4,
+              return_layer=None):
     
     if arch_table is None:
         arch_table = inception_vanila_table()
@@ -436,8 +437,9 @@ def googlenet(n,nclass,data_top,add_watchtower=True,arch_table=None):
     incp5b = inception_unit(n,'inception_5b',**arch_table['inception_5b'])
 
     pool_5 = dict2net(n,{'pool5/7x7_s1':max_pool(incp5b,ks=7,stride=1)})
-    poold5 = dict2net(n,{'pool5/drop_7x7_s1':L.Dropout(pool_5,in_place=True,dropout_ratio=0.4)})
-    clas_3 = dict2net(n,{'loss3/classifier':L.InnerProduct(poold5,
+    if dropout:
+        pool_5 = dict2net(n,{'pool5/drop_7x7_s1':L.Dropout(pool_5,in_place=True,dropout_ratio=dropout)})
+    clas_3 = dict2net(n,{'loss3/classifier-'+str(nclass):L.InnerProduct(pool_5,
                                                  param= [dict(lr_mult=1.0, decay_mult=1.0), 
                                                          dict(lr_mult=2.0, decay_mult=0)],
                                                  inner_product_param=dict(num_output=nclass,
@@ -445,8 +447,10 @@ def googlenet(n,nclass,data_top,add_watchtower=True,arch_table=None):
                                                  )})    
     if add_watchtower:
         return clas_1,clas_2,clas_3
-    
-    return clas_3
+    if return_layer is None:
+        return clas_3
+    else:
+        return getattr(n,return_layer)
         
 
 def vgg16(nclasses, source, transform_param=None, batch_size=32, acclayer = False, learn = True,is_color=False):

@@ -7,6 +7,11 @@ import PIL
 import h5py
 import SimpleITK as sitk
 
+
+def rgb2gray(rgb):
+    r, g, b = rgb[:,:,0], rgb[:,:,1], rgb[:,:,2]
+    return 0.2989 * r + 0.5870 * g + 0.1140 * b
+
 def mirrorlr(img):
     for i in range(img.shape[-2]):
         img[...,i,:]=img[...,i,::-1]
@@ -219,7 +224,36 @@ def calculate_h5_mean(imlist,data='data'):
     mean /= len(imlist)
     return mean
 
-def rgb2gray(rgb):
-    r, g, b = rgb[:,:,0], rgb[:,:,1], rgb[:,:,2]
-    return 0.2989 * r + 0.5870 * g + 0.1140 * b
+def write_h5_set(img_dict,h5_file,txtfile,metadata_dict=None):
+    with h5py.File(h5_file, 'w') as f:
+        for k,v in img_dict.iteritems():
+            f[k] = npa(v).astype(float)
+        if metadata_dict is not None:
+            for k,v in metadata_dict.iteritems():
+                f[k] = v
+    with open(txtfile, 'a') as f:
+        f.write(h5_file + '\n')
+
+
+def calculate_mean_image_h5(train_source,data_key='data'):
+    with open(train_source,'r') as f:
+        files=[line.strip() for line in f]
+    print(len(files));sys.stdout.flush()
+    img_mean=None
+    num_im=0
+    for fil in files:
+        with h5py.File(fil,'r') as f:
+            img=npa(f[data_key])
+        num_im+=1
+        if img_mean is None:
+            img_mean=img
+        else:
+            img_mean+=img
+        
+    img_mean=img_mean/num_im
+    if len(img_mean.shape)==4:
+        img_mean=img_mean[0,...]
+    print(num_im)
+    return img_mean
+
 
