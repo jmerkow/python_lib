@@ -65,7 +65,22 @@ def tile_im(*images,**kwargs):
         nda.append(np.vstack(images[nrows*c:nrows*c+nrows]))
     return np.hstack(nda)
 def imshow_list(*im_list, **kwargs):
-    nrows = kwargs.pop('nrows', 2)
+    """
+   This function displays a images lists with an IPython widget so the user can scroll through image sets.
+
+   Params:
+   Positional args are all assumed to be different image lists.  
+   pred_label_list can be used to display text the sets.
+   label_list can be used to display text for each image list.
+
+   Example:
+   imgs1=[np.random.rand(256,256) for n in range(0,10)]
+   imgs2=[np.random.rand(256,256)-1 for n in range(0,10)]
+   labels=["img "+str(n) for n in range(0,10)]
+   imshow_list(imgs1,imgs2,pred_label_list=labels)
+
+   """
+    nrows = kwargs.pop('nrows', 1)
     label_list=kwargs.pop('label_list', None)
     pred_label_list=kwargs.pop('pred_label_list', None)
     true_label_list=kwargs.pop('true_label_list', None)

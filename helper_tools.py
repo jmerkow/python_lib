@@ -9,18 +9,61 @@ pexists = os.path.exists
 mkdir = os.makedirs
 npa = np.array
 
-def try_float(s):
-    try:
-        s = float(s)
-    except:
-        return s
-    return s
+def cat_file(file):
+    if not pexists(file):
+        print("File {} does not exist".format(str(file)))
+        return
+    with open(file, "r") as f:
+        text = f.read()
+        print(text)
 
-def try_int(s):
+def is_int(s):
     try:
-        s=int(float(s))
+        int(float(s))
+        return True
     except:
-        return s
+        return False
+
+def try_int(s,default=None):
+    try:
+        return int(float(s))
+    except:
+        if default is None:
+            return s
+        else:
+            return default
+        
+def try_float(s,default=None):
+    try:
+        return float(s)
+    except:
+        if default is None:
+            return s
+        else:
+            return default
+
+def try_int_float(s,default=None):
+    try:
+        if int(float(s))==float(s):
+            return int(float(s))
+        else:
+            return try_float(s,default=default)
+    except:
+        if default is None:
+            return s
+        else:
+            return default
+    
+def try_bool_int_float(s,default=None):
+    try:
+        if float(s)==0:
+            return False
+
+        if float(s)==1:
+            return True
+        return try_int_float(s,default=default)
+    except:
+        return try_int_float(s,default=default)
 
 def pbasename(fn):
     return os.path.splitext(os.path.split(fn)[1])[0]

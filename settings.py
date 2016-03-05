@@ -1,6 +1,9 @@
 
 from __future__ import print_function
-import scipy.io, Image, os ,pandas, sys
+import pandas
+import pandas as PD
+from PIL import Image
+import scipy.io, os, sys
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -13,9 +16,9 @@ import glob
 
 CAFFECODEROOT=os.path.expandvars('$HOME/Code/caffe')
 CAFFESUB='caffe-dev'
-def generate_caffepath(caffecoderoot,caffesub):
+def generate_caffepath(caffecoderoot,caffesub,buildpath='build/tools/caffe'):   
     caffepythonpath=os.path.join(caffecoderoot,caffesub,'python')
-    caffeexepath=os.path.join(caffecoderoot,caffesub,'build/tools/caffe')
+    caffeexepath=os.path.join(caffecoderoot,caffesub,buildpath)
     caffeextraspath=os.path.join(caffecoderoot,caffesub,'tools/extra')
     logdir=os.path.join(caffecoderoot,'logs/')
     traineddir=os.path.join(caffecoderoot,'trained-models')
@@ -26,10 +29,10 @@ def generate_caffepath(caffecoderoot,caffesub):
 CAFFEPYTHONPATH,CAFFEEXEPATH,CAFFEEXTRASPATH,LOGDIR,TRAINEDDIR,WORKDIR =  generate_caffepath(CAFFECODEROOT,CAFFESUB)
 
 
-print("CAFFEPYTHONPATH: "+CAFFEPYTHONPATH,
-    "CAFFEEXEPATH: "+CAFFEEXEPATH,
-    "CAFFEEXTRASPATH: "+CAFFEEXTRASPATH,
-    "LOGDIR: "+LOGDIR,
-    "TRAINEDDIR: "+TRAINEDDIR,
-    "WORKDIR: "+WORKDIR,
-    sep='\n')
+# print("CAFFEPYTHONPATH: "+CAFFEPYTHONPATH,
+#     "CAFFEEXEPATH: "+CAFFEEXEPATH,
+#     "CAFFEEXTRASPATH: "+CAFFEEXTRASPATH,
+#     "LOGDIR: "+LOGDIR,
+#     "TRAINEDDIR: "+TRAINEDDIR,
+#     "WORKDIR: "+WORKDIR,
+#     sep='\n')

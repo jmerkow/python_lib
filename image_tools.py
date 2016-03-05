@@ -58,7 +58,7 @@ def jtm_resize(im, new_dims, interp_order=1):
     resized_im = resized_std * (im_max - im_min) + im_min
     return resized_im.astype(np.float32)
 
-def jtm_squash(image,newdims): 
+def jtm_squash(image,newdims):
     scale = tuple(np.array(newdims, dtype=float) / np.array(image.shape))
     im=scipy.ndimage.interpolation.zoom(image, scale, order=1) # squash
     
@@ -92,7 +92,7 @@ def jtm_scale_croppad(image,newdims=None,scale=(.5,.5), padmode='edge'):
     roi=(np.maximum(roi,0)).astype(int)
     if(sum(pad)):
 #         print(pad,scale)
-        pad2=[[p/2,p/2] if np.mod(p,2)==0 else [(p-1)/2,(p+1)/2] for p in pad]
+        pad2=[[int(p/2),int(p/2)] if np.mod(p,2)==0 else [int((p-1)/2),int((p+1)/2)] for p in pad]
         im=np.pad(im,pad2,mode=padmode)
     im=im[roi[0]:roi[0]+newdims[0],roi[1]:roi[1]+newdims[1]]
     
@@ -110,30 +110,37 @@ def jtm_scale_croppad2(image,newdims=None,scale=(.5,.5), **kwargs):
     roi = np.array([r if np.mod(r,2)==0 else r+1 for r in roi])/2
     roi=(np.maximum(roi,0)).astype(int)
     if(sum(pad)):
-#         print(pad,scale)
-        pad2=[[p/2,p/2] if np.mod(p,2)==0 else [(p-1)/2,(p+1)/2] for p in pad]
+        pad2=[[int(p/2),int(p/2)] if np.mod(p,2)==0 else [int((p-1)/2),int((p+1)/2)] for p in pad]
         im=np.pad(im,pad2,**kwargs)
-    im=im[roi[0]:roi[0]+newdims[0],roi[1]:roi[1]+newdims[1]]
     
+    im=im[roi[0]:roi[0]+newdims[0],roi[1]:roi[1]+newdims[1]]
     return im
 
-def load_dcm2d(path,newdims=None,preproc=None,**preprocargs):
-    img=sitk.ReadImage(path)
+def load_dcm2d(path,newdims=None,preproc=None,raise_rgb=True,**preprocargs):
+    try:
+        img=sitk.ReadImage(path)
+    except:
+        return
+
     isRGB=img.GetNumberOfComponentsPerPixel()>1
     image=sitk.GetArrayFromImage(img)
+
+
     image=np.squeeze(image)
     if isRGB:
         image=rgb2gray(image)
-        raise
+        if raise_rgb:
+            raise
     if len(image.shape)>2:
         print(image.shape)
         raise
+    # print("newdims",newdims)
     if newdims is not None and preproc is None:
         scale = tuple(np.array(newdims, dtype=float) / np.array(image.shape))
-#         print(scale)
         image=scipy.ndimage.interpolation.zoom(image, scale, order=1) # squash
     elif newdims is not None and preproc is not None:
         image=preproc(image,newdims,**preprocargs)
+    
     return image
     
     
@@ -255,5 +262,14 @@ def calculate_mean_image_h5(train_source,data_key='data'):
         img_mean=img_mean[0,...]
     print(num_im)
     return img_mean
+
+def preproc_image(image,newdims=None,preproc=None,raise_rgb=True,raise_nd=True,**preprocargs):
+    image=np.squeeze(image)
+    if newdims is not None and preproc is None:
+        scale = tuple(np.array(newdims, dtype=float) / np.array(image.shape))
+        image=scipy.ndimage.interpolation.zoom(image, scale, order=1) # squash
+    elif newdims is not None and preproc is not None:
+        image=preproc(image,newdims,**preprocargs)
+    return image
 
 

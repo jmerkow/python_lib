@@ -1,7 +1,7 @@
 from __future__ import print_function
-import scipy.io, Image, os, pandas, sys
+import scipy.io, os, pandas, sys
 import numpy as np
-
+from PIL import Image
 import time
 import caffe
 from caffe import layers as L, params as P
@@ -12,6 +12,7 @@ import tempfile
 from sklearn import metrics
 from helper_tools import *
 from image_tools import *
+from dcm_lib import *
 from collections import OrderedDict
 import glob, re
 
@@ -118,21 +119,20 @@ class CaffeSolver(OrderedDict):
         Export solver parameters to INPUT "filepath". Sorted alphabetically.
         """
         if file is not None:
-            open(file, 'w').close()
+            f=open(file, 'w')
+        else:
+            f=sys.stdout
+
         for key, value in sorted(self.items()):
-            if file is not None:
-                with open(file, 'a') as f:
-                    if hasattr(value,'__getitem__') and not isinstance(value,str):
-                        for v in value:
-                            print(key,": ",solver_fixup(key,v), file=f ,sep='')
-                    else:
-                        print(key,": ",solver_fixup(key,value),file=f,sep='')
+            if hasattr(value,'__getitem__') and not isinstance(value,str):
+                for v in value:
+                    print(key,": ",solver_fixup(key,v), file=f ,sep='')
             else:
-                if hasattr(value,'__getitem__') and not isinstance(value,str):
-                    for v in value:
-                        print(key,": ",solver_fixup(key,v),sep='')
-                else:
-                    print(key,": ",solver_fixup(key,value),sep='')
+                print(key,": ",solver_fixup(key,value),file=f,sep='')
+        
+        if file is not None:
+            f.close()
+
     def write(self,file):
         self.print(file=file)
     
@@ -161,97 +161,6 @@ def net_to_pic(net_proto):
     sio.seek(0)
     return mpimg.imread(sio)
 
-
-def run(workdir=None, caffemodel = None, gpuid = 1, 
-        solverFile = 'solver.prototxt', 
-        log = None, logdir = None,
-        snapshot_prefix = 'snapshot', 
-        caffepath = None, restart = False, nbr_iters = None,
-        do_run=False, byobu_rename=True, change_dir=False):
-
-
-    """
-    run is a simple caffe wrapper for training nets. It basically does two things. (1) ensures that training continues from the most recent model, and (2) makes sure the output is captured in a log file.
-    Takes
-    workdir: directory where the net prototxt lives.
-    caffemodel: name of a stored caffemodel.
-    solverFile: name of solver.prototxt [this refers, in turn, to net.prototxt]
-    log: name of log file
-    snapshot_prefix: snapshot prefix. 
-    caffepath: path the caffe binaries. This is required since we make a system call to caffe.
-    restart: determines whether to restart even if there are snapshots in the directory.
-    """
-
-    # find initial caffe model
-    if not caffemodel:
-        caffemodel = glob.glob(os.path.join(workdir, "*initial.caffemodel"))
-        if caffemodel:
-            caffemodel = os.path.basename(caffemodel[0])
-
-    # finds the latest snapshots
-    snapshots = glob.glob(os.path.join(workdir, "{}*.solverstate".format(snapshot_prefix)))
-    if snapshots:
-        _iter = [int(f[f.index('iter_')+5:f.index('.')]) for f in snapshots]
-        max_iter = np.max(_iter)
-        latest_snapshot = os.path.basename(snapshots[np.argmax(_iter)])
-    else:
-        max_iter = 0
-
-    # update solver with new max_iter parameter (if asked for)
-    if nbr_iters is not None: 
-        solver = CaffeSolver()
-        solver.add_from_file(os.path.join(workdir, solverFile))
-        solver['max_iter'] = str(max_iter + nbr_iters)
-        solver['snapshot'] = str(1000000) #disable this, don't need it.
-        solver.write(os.path.join(workdir, solverFile))
-        solverFile=os.path.join(workdir, solverFile)
-    
-    if solverFile is not None:
-        solver=CaffeSolver(fn=solverFile)
-    # if
-
-    if log is None:
-        log = '{}_{}.0.{:d}.log'.format(pbasename(os.path.split(solverFile)[0]),
-                                        pbasename(solverFile).replace('solver_',''),
-                                       int(solver['max_iter']))
-        log=os.path.join(logdir,log)
-    
-    if pexists(log):
-        for n in range(0,100):
-            if not pexists(log+'.'+str(n)):
-                log=log+'.'+str(n)
-                break
-
-    byobu_name=pbasename(log)
-    print (caffepath)
-    print (log)
-    # by default, start from the most recent snapshot
-    if snapshots and not(restart): 
-        print ("Running {} from iter {}.".format(workdir, np.max(_iter)))
-        runstring  = '{} train -solver {} -snapshot {} -gpu {} 2>&1 | tee {}'.format(caffepath, solverFile, latest_snapshot, gpuid, log)
-
-    # else, start from a pre-trained net defined in caffemodel
-    elif(caffemodel): 
-        if(os.path.isfile(os.path.join(workdir, caffemodel))):
-            print ("Fine tuning {} from {}.".format(workdir, caffemodel))
-            runstring  = '{} train -solver {} -weights {} -gpu {} 2>&1 | tee {}'.format(caffepath, solverFile, caffemodel, gpuid, log)
-
-        else:
-            raise IOError("Can't fine intial weight file: " + os.path.join(workdir, caffemodel))
-
-    # Train from scratch. Not recommended for larger nets.
-    else: 
-        print ("No caffemodel specified. Running {} from scratch!!".format(workdir))
-        runstring  = '{} train -solver {} -gpu {} 2>&1 | tee {}'.format(caffepath, solverFile, gpuid, log)
-
-    if change_dir:
-        runstring="cd {};".format(workdir) + runstring 
-    if byobu_rename:
-        runstring="byobu rename-window {}; ".format(byobu_name) + runstring
-    if do_run:
-        os.system(runstring)
-    else:
-        print(runstring)
 
 def run2(workdir=None, caffemodel = None, gpuid = 1, 
         solverFile = 'solver.prototxt', 
@@ -376,6 +285,141 @@ def run2(workdir=None, caffemodel = None, gpuid = 1,
     else:
         print()
         print(runstring)
+
+def run(workdir="./", caffemodel = None, gpuid = 1, 
+        solverFile = 'solver.prototxt', 
+        log = None,
+        snapshot_prefix = 'snapshot', debug=False,
+        caffepath = None, restart = False, nbr_iters = None,
+        do_run=True, byobu_rename=True, change_dir=True):
+
+
+    """
+    run is a simple caffe wrapper for training nets. It basically does two things. (1) ensures that training continues from the most recent model, and (2) makes sure the output is captured in a log file.
+    Takes
+    workdir: directory where the net prototxt lives.
+    caffemodel: name of a stored caffemodel.
+    solverFile: name of solver.prototxt [this refers, in turn, to net.prototxt]
+    log: name of log file
+    snapshot_prefix: snapshot prefix. 
+    caffepath: path the caffe binaries. This is required since we make a system call to caffe.
+    restart: determines whether to restart even if there are snapshots in the directory.
+    """
+
+    if caffepath is None:
+       raise ValueError("caffepath cannot be none")
+
+    workdir=os.path.abspath(workdir)
+    print()
+    print("workdir:", workdir)
+    if debug:
+        workdir_old=workdir
+        workdir=pjoin(workdir,'dbg')
+        solver=CaffeSolver(fn=solverFile)
+        solver['snapshot_prefix']='snapshots/dbg_train'
+#         solver['debug_info'] = True
+        solver['display'] = 1
+        solver['test_interval']=10
+        solverFile = solverFile.replace(workdir_old,workdir)
+        trained_fulldir=pjoin(workdir,'snapshots')
+        if not pexists(workdir): mkdir(workdir)
+        if not pexists(trained_fulldir): mkdir(trained_fulldir)
+        print(solverFile)
+        solver.print()
+        solver.write(solverFile)
+    # find initial caffe model
+    if not caffemodel:
+        caffemodel = glob.glob(os.path.join(workdir, "*initial.caffemodel"))
+        if caffemodel:
+            caffemodel = os.path.basename(caffemodel[0])
+
+    solver=CaffeSolver(fn=solverFile)
+    
+    # finds the latest snapshots
+    snapshots = glob.glob(os.path.join(workdir+'/', "{}*.solverstate".format(solver['snapshot_prefix'])))
+    if snapshots:
+        _iter = [f[f.index('iter_')+5:f.index('.s')] for f in snapshots]
+        _iter= map(int,_iter)
+        max_iter = np.max(_iter)
+        latest_snapshot = snapshots[np.argmax(_iter)]
+    else:
+        max_iter = 0
+    # update solver with new max_iter parameter (if asked for)
+    if nbr_iters is not None: 
+        solver = CaffeSolver()
+        solver.add_from_file(os.path.join(workdir, solverFile))
+        solver['max_iter'] = str(max_iter + nbr_iters)
+        solver['snapshot'] = str(1000000) #disable this, don't need it.
+        solver.write(os.path.join(workdir, solverFile))
+        solverFile=os.path.join(workdir, solverFile)
+    
+    if solverFile is not None:
+        solver=CaffeSolver(fn=solverFile)
+    # if
+    logdir=workdir
+
+    # if logdir is None:
+    #     logdir=workdir
+    
+    # if log is None:
+    #     log = '{}_{}.{}.{:d}.log'.format(pbasename(os.path.split(solverFile)[0]),
+    #                                     pbasename(solverFile).replace('solver_',''),max_iter,
+    #                                    int(solver['max_iter']))
+    log=os.path.join(logdir,'caffe_log.log')
+
+    if not debug:
+        log=check_file(log)
+
+
+    # if pexists(log):
+    #     for n in range(0,100):
+    #         if not pexists(log+'.'+str(n)):
+    #             log=log+'.'+str(n)
+    #             break
+
+    # if pexists(log2):
+    #     for n in range(0,100):
+    #         if not pexists(log2+'.'+str(n)):
+    #             log2=log2+'.'+str(n)
+    #             break
+
+    byobu_name=pbasename(workdir)
+    
+    print ("caffepath",caffepath)
+    print ("log",log)
+    print()
+
+    # by default, start from the most recent snapshot
+    if snapshots and not(restart): 
+        print ("Running {} from iter {}.".format(workdir, np.max(_iter)))
+        runstring  = '{} train -solver {} -snapshot {} -gpu {} 2>&1 | tee {}'.format(caffepath, solverFile, latest_snapshot, gpuid, log)
+
+    # else, start from a pre-trained net defined in caffemodel
+    elif(caffemodel): 
+        if(os.path.isfile(os.path.join(workdir, caffemodel))):
+            print ("Fine tuning {} from {}.".format(workdir, caffemodel))
+            runstring  = '{} train -solver {} -weights {} -gpu {} 2>&1 | tee {}'.format(caffepath, solverFile, caffemodel, gpuid, log)
+
+        else:
+            raise IOError("Can't fine intial weight file: " + os.path.join(workdir, caffemodel))
+
+    # Train from scratch. Not recommended for larger nets.
+    else: 
+        print ("No caffemodel specified. Running {} from scratch!!".format(workdir))
+        runstring  = '{} train -solver {} -gpu {} 2>&1 | tee {}'.format(caffepath, solverFile, gpuid, log) 
+
+    if change_dir:
+        runstring="cd {}; ".format(workdir) + runstring 
+    if byobu_rename:
+        runstring="byobu rename-window {}; ".format(byobu_name) + runstring
+    print()
+    print()
+    print(runstring)
+
+    time.sleep(10)
+
+    if do_run:
+        os.system(runstring)
 
 
 def get_transformer(deploy_file, mean_file=None):
@@ -556,8 +600,8 @@ def classify(caffemodel, deploy_file, image_files, imgpreproc=None,
 
     return indices,scores
 
-def classify_dcm(caffemodel, deploy_file, image_files, imgpreproc=None,
-        mean_file=None, mean_val=0, labels_file=None, gpuid=0,batch_size=None,return_backprop=False,**preprocargs):
+def classify_dcm(image_files, caffemodel=None, deploy_file=None, imgpreproc=None,
+        mean_file=None, mean_val=0, gpuid=0, batch_size=None, return_backprop=False,**preprocargs):
     """
     Classify some images against a Caffe model and print the results
     Arguments:
@@ -569,6 +613,10 @@ def classify_dcm(caffemodel, deploy_file, image_files, imgpreproc=None,
     labels_file path to a .txt file
     use_gpu -- if True, run inference on the GPU
     """
+    if caffemodel is None:
+        raise ValueError('caffemodel cannot be none')
+    if deploy_file is None:
+        raise ValueError('deploy_file cannot be none')
     # Load the model and images
     if gpuid>-1:
         caffe.set_mode_gpu()
@@ -585,14 +633,82 @@ def classify_dcm(caffemodel, deploy_file, image_files, imgpreproc=None,
         mode = 'L'
     else:
         raise ValueError('Invalid number for channels: %s' % channels)
-    images = [load_image(image_file, (height, width), mode, imgpreproc,**preprocargs)-np.array(mean_val) for image_file in image_files]
-    if labels_file:
-        labels = read_labels(labels_file)
+    # print(imgpreproc)
+    # print(preprocargs);sys.stdout.flush()
+    # preprocargs.pop('newdims')
+    assert(all(a==b for a,b in zip((height, width),preprocargs['newdims'])))
+    images = [load_dcm2d(image_file, preproc=imgpreproc,**preprocargs) for image_file in image_files]
+    # images = [image-np.array(mean_val) for image in images if image is not None]
+
+    # print(npa(images).mean())
+    # print(npa(images).shape)
+    # return images
 
     # Classify the image
     classify_start_time = time.time()
     if return_backprop:
-        scores,backprops = forward_pass(images, net, transformer,batch_size=batch_size,return_backprop=True)
+        scores,backprops = forward_pass(images, net, transformer,batch_size=batch_size,return_backprop=False)
+    else:
+        scores = forward_pass(images, net, transformer,batch_size=batch_size)
+#     print ('Classification took %s seconds.' % (time.time() - classify_start_time,)
+# )
+    ### Process the results
+
+    indices = (-scores).argsort()[:, :]
+    if return_backprop:
+        return indices,scores,backprops
+
+    return indices,scores
+
+
+def classify_data(images, caffemodel=None, deploy_file=None, imgpreproc=None,
+        mean_file=None, mean_val=0, gpuid=0, batch_size=None, return_backprop=False,**preprocargs):
+    """
+    Classify some images against a Caffe model and print the results
+    Arguments:
+    caffemodel -- path to a .caffemodel
+    deploy_file -- path to a .prototxt
+    image_files -- list of paths to images
+    Keyword arguments:
+    mean_file -- path to a .binaryproto
+    labels_file path to a .txt file
+    use_gpu -- if True, run inference on the GPU
+    """
+    if caffemodel is None:
+        raise ValueError('caffemodel cannot be none')
+    if deploy_file is None:
+        raise ValueError('deploy_file cannot be none')
+    # Load the model and images
+    if gpuid>-1:
+        caffe.set_mode_gpu()
+        caffe.set_device(gpuid)
+    net = caffe.Net(deploy_file, caffemodel, caffe.TEST)
+    # net = get_net(caffemodel, deploy_file, use_gpu)
+    transformer = get_transformer(deploy_file, mean_file)
+    bs, channels, height, width = transformer.inputs['data']
+    if batch_size is None:
+        batch_size=bs
+    if channels == 3:
+        mode = 'RGB'
+    elif channels == 1:
+        mode = 'L'
+    else:
+        raise ValueError('Invalid number for channels: %s' % channels)
+    # print(imgpreproc)
+    # print(preprocargs);sys.stdout.flush()
+    # preprocargs.pop('newdims')
+    # print(npa(images).mean())
+    assert(all(a==b for a,b in zip((height, width),preprocargs['newdims'])))
+    images = [preproc_image(image, preproc=imgpreproc,**preprocargs) for image in images]
+
+    # print(npa(images).mean())
+    # print(npa(images).shape)
+    # return images
+
+    # Classify the image
+    classify_start_time = time.time()
+    if return_backprop:
+        scores,backprops = forward_pass(images, net, transformer,batch_size=batch_size,return_backprop=False)
     else:
         scores = forward_pass(images, net, transformer,batch_size=batch_size)
 #     print ('Classification took %s seconds.' % (time.time() - classify_start_time,)

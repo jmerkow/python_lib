@@ -154,7 +154,7 @@ def ip_bn_relu(bottom, nout, learn=True, param=None,  bn_learn=False,
 def add_loss(n,s,bottom,label,losslayer=L.SoftmaxWithLoss,**lossargs):
     return dict2net(n,{s:losslayer(bottom,label,**lossargs)})
 def add_acc(n,s,bottom,label,top_k=None):
-    if top_k is None:
+    if top_k is None or top_k==0:
         dict2net(n,{s:L.Accuracy(bottom,label)})
     else:
         dict2net(n,{s+'-top-'+str(top_k):L.Accuracy(bottom,label,top_k=top_k)})     
@@ -446,11 +446,55 @@ def googlenet(n,nclass,data_top,add_watchtower=True,arch_table=None, dropout=0.4
                                                                          weight_filler=dict(type="xavier"))
                                                  )})    
     if add_watchtower:
-        return clas_1,clas_2,clas_3
+        if return_layer is None:
+            return clas_1,clas_2,clas_3
+        else:
+            return clas_1,clas_2,clas_3,getattr(n,return_layer)
     if return_layer is None:
         return clas_3
     else:
         return getattr(n,return_layer)
+
+def googlenet2(n,nclass,data_top,arch_table=None):
+    
+    if arch_table is None:
+        arch_table = inception_vanila_table()
+    conv1 = dict2net(n,dict(zip(['conv1/7x7','conv1/relu_7x7'],
+                            conv_relu(data_top,64,ks=7,pad=3,stride=2,
+                                      wf=dict(type="xavier")))))
+
+    pool_1 = dict2net(n,{'pool1/3x3_s2':max_pool(get_bottom(n),ks=3,stride=2,pad=0)})
+    pooln1 = dict2net(n,{'pool1/norm1':L.LRN(pool_1,local_size=5,alpha=0.0001,beta=0.75)})
+
+    conv2r = dict2net(n,dict(zip(['conv2/3x3_reduce','conv2/relu_3x3_reduce'], 
+                                 conv_relu(pooln1,64,ks=1,pad=0,
+                                           wf=dict(type="xavier")))))
+    conv2 = dict2net(n,dict(zip(['conv2/3x3','conv2/relu_3x3'],
+                                conv_relu(conv2r,192,ks=3,pad=1,
+                                          wf=dict(type="xavier")))))
+    
+    pool_2=dict2net(n,{'pool2/3x3_s2':max_pool(conv2,ks=3,stride=2,pad=0)})
+
+
+
+    incp3a = inception_unit(n,'inception_3a',**arch_table['inception_3a'])
+    incp3b = inception_unit(n,'inception_3b',**arch_table['inception_3b'])
+    pool_3 = dict2net(n,{'pool3/3x3_s2':max_pool(incp3b,ks=3,stride=2,pad=0)})
+    incp4a = inception_unit(n,'inception_4a',**arch_table['inception_4a'])
+    incp4b = inception_unit(n,'inception_4b',bottom=incp4a,**arch_table['inception_4b'])
+    incp4c = inception_unit(n,'inception_4c',**arch_table['inception_4c'])
+    incp4d = inception_unit(n,'inception_4d',**arch_table['inception_4d'])
+    incp4e = inception_unit(n,'inception_4e',bottom=incp4d,**arch_table['inception_4e'])
+    pool_4 = dict2net(n,{'pool4/3x3_s2':max_pool(get_bottom(n),ks=3,stride=2)})
+
+    incp5a = inception_unit(n,'inception_5a',**arch_table['inception_5a'])
+    incp5b = inception_unit(n,'inception_5b',**arch_table['inception_5b'])
+
+    pool_5 = dict2net(n,{'pool5/7x7_s1':max_pool(incp5b,ks=7,stride=1)})
+    if dropout:
+        pool_5 = dict2net(n,{'pool5/drop_7x7_s1':L.Dropout(pool_5,in_place=True,dropout_ratio=dropout)})
+
+    
         
 
 def vgg16(nclasses, source, transform_param=None, batch_size=32, acclayer = False, learn = True,is_color=False):
