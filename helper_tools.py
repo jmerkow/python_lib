@@ -1,6 +1,7 @@
 import os, sys, shutil
 import numpy as np
 import matplotlib.pyplot as plt
+from datetime import datetime, date, timedelta
 
 pjoin = os.path.join
 psplit = os.path.split
@@ -8,6 +9,15 @@ psplitext = os.path.splitext
 pexists = os.path.exists
 mkdir = os.makedirs
 npa = np.array
+
+
+def dt2str(dt):
+    ts=dt.total_seconds()
+    s=dt.seconds
+    m=s/60;h=m/60;s=round(ts-((h*60*60)+m*60),2)
+    if h:
+        return '{}h {}m {}s'.format(h,m,s)
+    return '{}m {}s'.format(m,s)
 
 def cat_file(file):
     if not pexists(file):
