@@ -3,6 +3,7 @@ import pandas as pd
 from pandas import HDFStore
 import os
 import time
+import errno
 
 
 
@@ -17,8 +18,11 @@ class SafeHDFStore(HDFStore):
                                                   os.O_EXCL |
                                                   os.O_WRONLY)
                 break
-            except FileExistsError:
-                time.sleep(probe_interval)
+            except OSError as e:
+                if e.errno == errno.EEXIST:
+                    time.sleep(probe_interval)
+                else:
+                    raise
 
         HDFStore.__init__(self, *args, **kwargs)
 
