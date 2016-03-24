@@ -410,11 +410,17 @@ def run(workdir="./", caffemodel = None, gpuid = 1,
 
     if change_dir:
         runstring="cd {}; ".format(workdir) + runstring 
+    byoburen=''
     if byobu_rename:
-        runstring="byobu rename-window {}; ".format(byobu_name) + runstring
+        byoburen="byobu rename-window {}; ".format(byobu_name)
     print()
-    print()
+    print(byoburen)
     print(runstring)
+
+    if do_run:
+        os.system(byoburen)
+    else:
+        runstring=byoburen + runstring
 
     time.sleep(10)
 
