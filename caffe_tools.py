@@ -136,7 +136,10 @@ class CaffeSolver(OrderedDict):
     def write(self,file):
         self.print(file=file)
     
-
+def get_snapshots(snapstr):
+    snapshots = glob.glob(os.path.join(snapstr))
+    _iter = [int(f[f.index('iter_')+5:f.index('.')]) for f in snapshots]
+    return OrderedDict(sorted(zip(_iter,snapshots)))
 
 
 def load_net(net_proto,caffeModel=None,mode=caffe.TRAIN):

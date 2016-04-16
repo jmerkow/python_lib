@@ -1,7 +1,7 @@
 
 from __future__ import print_function
 import pandas
-import pandas as PD
+import pandas as pd
 from PIL import Image
 import scipy.io, os, sys
 import numpy as np

@@ -10,7 +10,6 @@ pexists = os.path.exists
 mkdir = os.makedirs
 npa = np.array
 
-
 def dt2str(dt):
     m, s = divmod(dt.total_seconds(), 60)
     h, m = divmod(m, 60)

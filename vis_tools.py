@@ -1,5 +1,12 @@
-from IPython.html.widgets import interact, interactive
-from IPython.html import widgets
+try:
+    from ipywidgets import interact, interactive, widgets
+    print("ipywidgets")
+except:
+    from IPython.html.widgets import interact, interactive
+    from IPython.html import widgets
+    print("ipy.html")
+
+
 import matplotlib.pyplot as plt
 import matplotlib.pylab as pylab
 import matplotlib.cm as cm

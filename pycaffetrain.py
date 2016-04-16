@@ -12,7 +12,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-gpu", type=int, default=0)
     parser.add_argument("-dbg",action="store_true")
+    parser.add_argument("-ft",default=None)
+
     args = parser.parse_args()
 
 
-    ct.run(caffepath=CAFFEEXEPATH,gpuid=args.gpu,debug=args.dbg)
+    ct.run(caffepath=CAFFEEXEPATH,gpuid=args.gpu,debug=args.dbg,caffemodel=args.ft)
