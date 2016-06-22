@@ -14,8 +14,8 @@ from matplotlib import colors
 import glob
 
 
-CAFFECODEROOT=os.path.expandvars('$HOME/Code/caffe')
-CAFFESUB='caffe-dev'
+CAFFECODEROOT=os.path.expandvars('/workspace2/Code/caffe')
+CAFFESUB='dev'
 def generate_caffepath(caffecoderoot,caffesub,buildpath='build/tools/caffe'):   
     caffepythonpath=os.path.join(caffecoderoot,caffesub,'python')
     caffeexepath=os.path.join(caffecoderoot,caffesub,buildpath)
