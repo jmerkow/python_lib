@@ -58,8 +58,12 @@ def jtm_resize(im, new_dims, interp_order=1):
     resized_im = resized_std * (im_max - im_min) + im_min
     return resized_im.astype(np.float32)
 
-def jtm_squash(image,newdims):
-    scale = tuple(np.array(newdims, dtype=float) / np.array(image.shape))
+def jtm_squash(image,newdims,**preprocargs):
+    img_shape = np.array(image.shape)
+    if len(img_shape)==2:
+        img_shape = np.append([1],img_shape)
+        image=image.reshape(img_shape)
+    scale = tuple(np.array(newdims, dtype=float) / img_shape)
     im=scipy.ndimage.interpolation.zoom(image, scale, order=1) # squash
     
     return im
@@ -124,15 +128,12 @@ def load_dcm2d(path,newdims=None,preproc=None,raise_rgb=True,**preprocargs):
 
     isRGB=img.GetNumberOfComponentsPerPixel()>1
     image=sitk.GetArrayFromImage(img)
-
-
     image=np.squeeze(image)
     if isRGB:
         image=rgb2gray(image)
         if raise_rgb:
             raise
     if len(image.shape)>2:
-        print(image.shape)
         raise
     # print("newdims",newdims)
     if newdims is not None and preproc is None:

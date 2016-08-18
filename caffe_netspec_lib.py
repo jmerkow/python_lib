@@ -23,18 +23,19 @@ def ave_pool(bottom, ks=2, stride=2,pad=1):
 
 def conv_relu(bottom, nout, ks=3, stride=1, pad=1, learn=True, 
               param=None, group=1, wf=None,bf=None):
+        
     if learn and param is None:
         param = [dict(lr_mult=1.0, decay_mult=1.0), dict(lr_mult=2.0, decay_mult=0.0)]
     else:
         param = [dict(lr_mult=0, decay_mult=0), dict(lr_mult=0, decay_mult=0)]
     
-    if wf is None:
+    if wf is None:        
         conv = L.Convolution(bottom, kernel_size=ks, stride=stride,
             num_output=nout, pad=pad, param=param, group=group)
     else:
         if bf is None:
             conv = L.Convolution(bottom, kernel_size=ks, stride=stride,
-                num_output=nout, pad=pad, param=param, group=group ,weight_filler=wf)
+                num_output=nout, pad=pad,param=param, group=group ,weight_filler=wf)
         else:
             conv = L.Convolution(bottom, kernel_size=ks, stride=stride,
                                  num_output=nout, pad=pad, param=param, group=group,
