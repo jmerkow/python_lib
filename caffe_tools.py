@@ -700,8 +700,10 @@ def classify_data(images, caffemodel=None, deploy_file=None, imgpreproc=None,
     if batch_size is None:
         batch_size=bs
 
-    
-    assert(all(a==b for a,b in zip((channels, height, width),preprocargs['newdims'])))
+    if len(preprocargs['newdims'])==2:
+        assert(all(a==b for a,b in zip((height, width),preprocargs['newdims'])))
+    else:
+        assert(all(a==b for a,b in zip((channels, height, width),preprocargs['newdims'])))
     images = [preproc_image(image, preproc=imgpreproc,**preprocargs) for image in images]
     # print(npa(images).mean())
     # print(npa(images).shape)

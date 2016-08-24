@@ -63,6 +63,9 @@ def jtm_squash(image,newdims,**preprocargs):
     if len(img_shape)==2:
         img_shape = np.append([1],img_shape)
         image=image.reshape(img_shape)
+    if len(newdims)==2:
+        newdims = np.append([1],newdims)
+        #image=newdims.reshape(newdims)
     scale = tuple(np.array(newdims, dtype=float) / img_shape)
     im=scipy.ndimage.interpolation.zoom(image, scale, order=1) # squash
     
@@ -125,17 +128,15 @@ def load_dcm2d(path,newdims=None,preproc=None,raise_rgb=True,**preprocargs):
         img=sitk.ReadImage(path)
     except:
         return
-
     isRGB=img.GetNumberOfComponentsPerPixel()>1
     image=sitk.GetArrayFromImage(img)
     image=np.squeeze(image)
+    
     if isRGB:
         image=rgb2gray(image)
         if raise_rgb:
             raise
-    if len(image.shape)>2:
-        raise
-    # print("newdims",newdims)
+    assert(len(image.shape)==2)
     if newdims is not None and preproc is None:
         scale = tuple(np.array(newdims, dtype=float) / np.array(image.shape))
         image=scipy.ndimage.interpolation.zoom(image, scale, order=1) # squash
@@ -143,9 +144,6 @@ def load_dcm2d(path,newdims=None,preproc=None,raise_rgb=True,**preprocargs):
         image=preproc(image,newdims,**preprocargs)
     
     return image
-    
-    
-
 
 def load_image(path, newdims=None, mode='RGB', preproc=None,**preprocargs):
     """
@@ -273,4 +271,65 @@ def preproc_image(image,newdims=None,preproc=None,raise_rgb=True,raise_nd=True,*
         image=preproc(image,newdims,**preprocargs)
     return image
 
+def make_vol(images,image_shape, min_val=None):
+    
+    if min_val is None:
+        min_val=np.inf
 
+    for image in images:
+        if image is not None:
+            image_min = np.min(image)
+            if min_val > image_min:
+                min_val = image_min
+                
+    vol = np.ones([len(images),image_shape[0],image_shape[1]])*min_val
+
+    for index,image in enumerate(images):
+        if image is not None and image.shape==image_shape:
+            vol[index,:,:] = image
+    return vol,min_val
+
+def get_image_list(images,image_shape,window_size,min_val=None):
+    image_list = []
+    if window_size==(0,0):
+        image_list=[image for image in images if image is not None]
+    else:
+        vol,min_val = make_vol(images,image_shape,min_val=min_val)
+        if vol is None:
+            return
+        vol_len = vol.shape[0]
+        vol=np.pad(vol,(window_size,(0,0),(0,0)),'constant',constant_values=min_val)
+        image_ix = [i for i,image in enumerate(images) if image is not None]
+        for ix in image_ix:
+            image_list.append(vol[ix:ix+sum(window_size)+1,:,:])
+    return image_list
+
+
+def get_images_windows(images,window_size,two_side=False,min_val=None):
+    image_shapes = {}
+    for image in images:
+        if image is not None and len(image.shape)==2:
+            if image.shape in image_shapes.keys():
+                image_shapes[image.shape] += 1
+            else:
+                image_shapes[image.shape] = 1
+    image_shapes = list(sorted(image_shapes, key=image_shapes.__getitem__, reverse=True)) 
+    image_shape = image_shapes[0]
+    image_list = get_image_list(images,image_shape,window_size,min_val=min_val)
+    return image_list
+
+def interpolate_image(images,mirror=False,scale=1,rot=0,cval=0,reverse=False):
+    images_copy = images.copy()
+    if mirror:
+        images_copy = mirrorlr(images_copy)
+    if reverse:
+        images_copy= images_copy[::-1,:,:]
+    if rot != 0:
+        images_copy=\
+        rotate(images_copy.transpose(1,2,0),rot,order=2,reshape=False,mode='constant', cval=cval).transpose(2,0,1)
+    if scale != 1:
+        for i in range(images_copy.shape[0]):
+            images_copy[i,:,:] = jtm_scale_croppad2(images_copy[i,:,:],images_copy[i,:,:].shape,
+                                             (scale,scale),mode='constant',constant_values=(cval,))
+        
+    return images_copy
