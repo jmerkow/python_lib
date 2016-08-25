@@ -6,7 +6,7 @@ from skimage.transform import resize
 import PIL
 import h5py
 import SimpleITK as sitk
-
+from scipy.ndimage.interpolation import rotate
 
 def rgb2gray(rgb):
     r, g, b = rgb[:,:,0], rgb[:,:,1], rgb[:,:,2]
