@@ -271,10 +271,11 @@ def preproc_image(image,newdims=None,preproc=None,raise_rgb=True,raise_nd=True,*
         image=preproc(image,newdims,**preprocargs)
     return image
 
+##put images together as a volume
 def make_vol(images,image_shape, min_val=None):
     
     if min_val is None:
-        min_val=np.inf
+        min_val=-1*np.inf
 
     for image in images:
         if image is not None:
@@ -283,12 +284,13 @@ def make_vol(images,image_shape, min_val=None):
                 min_val = image_min
                 
     vol = np.ones([len(images),image_shape[0],image_shape[1]])*min_val
-
+    
     for index,image in enumerate(images):
         if image is not None and image.shape==image_shape:
             vol[index,:,:] = image
     return vol,min_val
 
+## returns a list of images that are of the window size
 def get_image_list(images,image_shape,window_size,min_val=None):
     image_list = []
     if window_size==(0,0):
@@ -315,9 +317,12 @@ def get_images_windows(images,window_size,two_side=False,min_val=None):
                 image_shapes[image.shape] = 1
     image_shapes = list(sorted(image_shapes, key=image_shapes.__getitem__, reverse=True)) 
     image_shape = image_shapes[0]
+    images = [image for image in images if image is not None and image.shape==image_shape]            
     image_list = get_image_list(images,image_shape,window_size,min_val=min_val)
     return image_list
 
+#interpolate image with mirror, reverse, scale and rotate
+#The function takes multiple images as input
 def interpolate_image(images,mirror=False,scale=1,rot=0,cval=0,reverse=False):
     images_copy = images.copy()
     if mirror:
