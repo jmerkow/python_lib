@@ -275,7 +275,7 @@ def preproc_image(image,newdims=None,preproc=None,raise_rgb=True,raise_nd=True,*
 def make_vol(images,image_shape, min_val=None):
     
     if min_val is None:
-        min_val=-1*np.inf
+        min_val=np.inf
 
     for image in images:
         if image is not None:
