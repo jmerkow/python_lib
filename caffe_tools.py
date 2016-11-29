@@ -54,6 +54,8 @@ class CaffeSolver(OrderedDict):
     Note that all parameters are stored as strings. For technical reasons, the strings are stored as strings within strings.
     """
 
+    comments=None
+
     def __init__(self, d=None, default=True,
                 testnet_prototxt_path = None, 
                 trainnet_prototxt_path = None,
@@ -113,6 +115,30 @@ class CaffeSolver(OrderedDict):
         """
         self.update(solverdict_from_file(filepath))
 
+    def add_comment(self, comment):
+        if self.comments is None:
+            self.comments = str(comment).split("\n")
+        else:
+            self.comments += str(comment).split("\n")
+
+    def __str__(self):
+        output = []
+        for key, value in sorted(self.items()):
+            if hasattr(value,'__getitem__') and not isinstance(value,str):
+                for v in value:
+                    output.append( '{}: {}'.format(key,solver_fixup(key,v)) )
+            else:
+                output.append('{}: {}'.format(key, solver_fixup(key, value)))
+
+        if self.comments:
+            for comment in self.comments:
+                output.append("#{}".format(comment))
+
+        return '\n'.join(output)
+
+    def __repr(self):
+        return self.__str__()
+
 
     def print(self, file=None):
         """
@@ -123,13 +149,8 @@ class CaffeSolver(OrderedDict):
         else:
             f=sys.stdout
 
-        for key, value in sorted(self.items()):
-            if hasattr(value,'__getitem__') and not isinstance(value,str):
-                for v in value:
-                    print(key,": ",solver_fixup(key,v), file=f ,sep='')
-            else:
-                print(key,": ",solver_fixup(key,value),file=f,sep='')
-        
+        print(self,file=f, sep='')
+
         if file is not None:
             f.close()
 
