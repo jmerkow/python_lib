@@ -331,7 +331,7 @@ def run(workdir="./", caffemodel = None, gpuid = 1,
     """
 
     if caffepath is None:
-       raise ValueError("caffepath cannot be none")
+        raise ValueError("caffepath cannot be none")
 
     workdir=os.path.abspath(workdir)
     print()
@@ -534,17 +534,19 @@ def forward_pass(images, net, transformer, batch_size=1,return_backprop=False):
             caffe_images.append(image)
 
     caffe_images = np.array(caffe_images)
-
-    dims = transformer.inputs['data'][1:]
-
+    dims = transformer.inputs['data']
     scores,backprops = None,None
     for chunk in [caffe_images[x:x+batch_size] for x in xrange(0, len(caffe_images), batch_size)]:
         new_shape = (len(chunk),) + tuple(dims)
         if net.blobs['data'].data.shape != new_shape:
             net.blobs['data'].reshape(*new_shape)
+        
+        image_data = np.zeros(chunk.shape)
         for index, image in enumerate(chunk):
-            image_data = transformer.preprocess('data', image)
-            net.blobs['data'].data[index] = image_data
+            image_data[index,:,:] = transformer.preprocess('data', image.transpose(1,2,0))
+        net.blobs['data'].reshape(*image_data.shape)
+        net.blobs['data'].data[...] = image_data
+        
         output = net.forward()[net.outputs[-1]]
         if return_backprop:
                 net.blobs[net.outputs[-1]].diff[...]=output[...]
@@ -718,19 +720,12 @@ def classify_data(images, caffemodel=None, deploy_file=None, imgpreproc=None,
     bs, channels, height, width = transformer.inputs['data']
     if batch_size is None:
         batch_size=bs
-    if channels == 3:
-        mode = 'RGB'
-    elif channels == 1:
-        mode = 'L'
-    else:
-        raise ValueError('Invalid number for channels: %s' % channels)
-    # print(imgpreproc)
-    # print(preprocargs);sys.stdout.flush()
-    # preprocargs.pop('newdims')
-    # print(npa(images).mean())
-    assert(all(a==b for a,b in zip((height, width),preprocargs['newdims'])))
-    images = [preproc_image(image, preproc=imgpreproc,**preprocargs) for image in images]
 
+    if len(preprocargs['newdims'])==2:
+        assert(all(a==b for a,b in zip((height, width),preprocargs['newdims'])))
+    else:
+        assert(all(a==b for a,b in zip((channels, height, width),preprocargs['newdims'])))
+    images = [preproc_image(image, preproc=imgpreproc,**preprocargs) for image in images]
     # print(npa(images).mean())
     # print(npa(images).shape)
     # return images
